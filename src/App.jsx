@@ -34,7 +34,7 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter basename="/app">
+        <BrowserRouter>
           <Toaster position="top-right" richColors />
           <Routes>
             <Route path="/login" element={<Login />} />
