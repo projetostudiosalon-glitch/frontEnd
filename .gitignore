@@ -26,5 +26,6 @@ dist-ssr
 # Build outputs
 build
 dist
+app
 .vercel
 .netlify
