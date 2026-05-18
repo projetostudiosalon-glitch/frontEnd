@@ -1,0 +1,145 @@
+import React, { useEffect, useState } from "react";
+import http from "../api";
+import { PageHeader, EmptyState } from "../components/Page";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "../components/ui/dialog";
+import { UsersRound, Plus, Edit2, Trash2, Shield } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "../auth";
+
+const blank = { name: "", email: "", senha: "", role: "funcionario", ativo: true };
+
+export default function Usuarios() {
+  const { user: me } = useAuth();
+  const [list, setList] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blank);
+
+  const load = () => http.get("/users").then((r) => setList(r.data)).catch((e) => toast.error(e.response?.data?.detail || "Erro ao carregar"));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!form.name || !form.email) { toast.error("Nome e email obrigatórios"); return; }
+    if (!form.id && !form.senha) { toast.error("Senha obrigatória"); return; }
+    try {
+      const payload = { name: form.name, email: form.email, role: form.role, ativo: form.ativo };
+      
+      // Só enviar senha se foi preenchida
+      if (form.senha && form.senha.trim()) {
+        payload.senha = form.senha;
+      }
+      
+      if (form.id) {
+        await http.put(`/users/${form.id}`, payload);
+        toast.success("Usuário atualizado");
+      } else {
+        await http.post("/users", { ...payload, senha: form.senha });
+        toast.success("Usuário criado");
+      }
+      setOpen(false);
+      setForm(blank);
+      load();
+    } catch (e) { 
+      toast.error(e.response?.data?.detail || "Erro ao salvar"); 
+    }
+  };
+
+  const del = async (id, email) => {
+    if (!window.confirm(`Excluir usuário ${email}?`)) return;
+    try { 
+      await http.delete(`/users/${id}`); 
+      toast.success("Removido"); 
+      load(); 
+    }
+    catch (e) { 
+      toast.error(e.response?.data?.detail || "Erro"); 
+    }
+  };
+
+  const edit = (u) => { 
+    setForm({ ...u, senha: "" }); 
+    setOpen(true); 
+  };
+
+  return (
+    <div className="p-6 lg:p-8 fade-in">
+      <PageHeader overline="Acessos" title="Usuários" action={
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(blank); }}>
+          <DialogTrigger asChild>
+            <Button data-testid="add-user-btn" className="bg-[#84A59D] hover:bg-[#6F9189]"><Plus className="w-4 h-4 mr-1" /> Novo usuário</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{form.id ? "Editar" : "Novo"} usuário</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div><Label>Nome *</Label><Input data-testid="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+              <div><Label>Email *</Label><Input data-testid="user-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+              <div>
+                <Label>{form.id ? "Nova senha (deixe vazio para manter)" : "Senha *"}</Label>
+                <Input 
+                  data-testid="user-password" 
+                  type="password" 
+                  value={form.senha || ""} 
+                  onChange={(e) => setForm({ ...form, senha: e.target.value })} 
+                  placeholder={form.id ? "Digite uma nova senha se quiser alterar" : "Senha obrigatória"}
+                />
+              </div>
+              <div>
+                <Label>Perfil *</Label>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                  <SelectTrigger data-testid="user-role"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="funcionario">Funcionário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={form.ativo} onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
+                <Label>Ativo</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button data-testid="save-user-btn" onClick={save} className="bg-[#84A59D] hover:bg-[#6F9189]">Salvar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      } />
+
+      {list.length === 0 ? <EmptyState icon={UsersRound} title="Nenhum usuário" hint="Cadastre usuários para dar acesso ao sistema." /> : (
+        <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-zinc-50 text-xs uppercase tracking-wider text-zinc-500">
+              <tr><th className="px-4 py-3 text-left">Nome</th><th className="px-4 py-3 text-left">Email</th><th className="px-4 py-3 text-left">Perfil</th><th className="px-4 py-3 text-left">Status</th><th></th></tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {list.map((u) => (
+                <tr key={u.id} className="hover:bg-zinc-50/60" data-testid={`user-row-${u.id}`}>
+                  <td className="px-4 py-3 font-medium">{u.name} {u.id === me?.id && <span className="text-xs text-zinc-400 ml-1">(você)</span>}</td>
+                  <td className="px-4 py-3 text-zinc-600">{u.email}</td>
+                  <td className="px-4 py-3">
+                    {u.role === "admin" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EAF0EE] text-[#3A4F4A] text-xs font-medium"><Shield className="w-3 h-3" /> Admin</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 text-xs font-medium">Funcionário</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.ativo ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"}`}>{u.ativo ? "Ativo" : "Inativo"}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-1">
+                    <Button size="sm" variant="ghost" onClick={() => edit(u)} data-testid={`edit-user-${u.id}`}><Edit2 className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => del(u.id, u.email)} data-testid={`delete-user-${u.id}`}><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

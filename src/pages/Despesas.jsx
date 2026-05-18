@@ -1,0 +1,279 @@
+import React, { useEffect, useState } from "react";
+import http from "../api";
+import { PageHeader } from "../components/Page";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
+import { Checkbox } from "../components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { Plus, Trash2, Edit2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+
+const fmtBRL = (n) => (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtDT = (s) => s ? new Date(s).toLocaleDateString("pt-BR") : "-";
+
+const CATEGORIAS = [
+  "Aluguel",
+  "Salários",
+  "Água/Luz",
+  "Internet",
+  "Telefone",
+  "Manutenção",
+  "Limpeza",
+  "Suprimentos",
+  "Publicidade",
+  "Seguros",
+  "Impostos",
+  "Outros"
+];
+
+export default function Despesas() {
+  const [despesas, setDespesas] = useState([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [tab, setTab] = useState("fixas");
+  const [form, setForm] = useState({
+    descricao: "",
+    valor: "",
+    tipo: "fixo",
+    categoria: "",
+    data_vencimento: "",
+    data_pagamento: "",
+    pago: false,
+    observacoes: ""
+  });
+
+  const load = () => {
+    http.get("/despesas").then((r) => setDespesas(r.data)).catch(() => setDespesas([]));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const resetForm = () => {
+    setForm({
+      descricao: "",
+      valor: "",
+      tipo: "fixo",
+      categoria: "",
+      data_vencimento: "",
+      data_pagamento: "",
+      pago: false,
+      observacoes: ""
+    });
+    setEditingId(null);
+  };
+
+  const openDialog = (despesa = null) => {
+    if (despesa) {
+      setForm(despesa);
+      setEditingId(despesa.id);
+    } else {
+      resetForm();
+    }
+    setDialogOpen(true);
+  };
+
+  const save = async () => {
+    if (!form.descricao.trim()) {
+      toast.error("Descrição obrigatória");
+      return;
+    }
+    if (!form.valor || Number(form.valor) <= 0) {
+      toast.error("Valor deve ser maior que zero");
+      return;
+    }
+
+    try {
+      if (editingId) {
+        await http.put(`/despesas/${editingId}`, form);
+        toast.success("Despesa atualizada");
+      } else {
+        await http.post("/despesas", form);
+        toast.success("Despesa criada");
+      }
+      setDialogOpen(false);
+      resetForm();
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erro");
+    }
+  };
+
+  const deleteDespesa = async (id) => {
+    if (!window.confirm("Tem certeza?")) return;
+    try {
+      await http.delete(`/despesas/${id}`);
+      toast.success("Despesa removida");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erro");
+    }
+  };
+
+  const filteredDespesas = despesas.filter(d => d.tipo === tab);
+  const totalDespesas = filteredDespesas.reduce((sum, d) => sum + (d.valor || 0), 0);
+  const totalPago = filteredDespesas.filter(d => d.pago).reduce((sum, d) => sum + (d.valor || 0), 0);
+  const totalAberto = totalDespesas - totalPago;
+
+  return (
+    <div className="p-6 lg:p-8 fade-in">
+      <PageHeader overline="Financeiro" title="Despesas" action={<Button onClick={() => openDialog()}><Plus className="w-4 h-4 mr-1" /> Nova despesa</Button>} />
+
+      <Tabs value={tab} onValueChange={setTab} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="fixas">Despesas Fixas</TabsTrigger>
+          <TabsTrigger value="variavel">Despesas Variáveis</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white border border-zinc-200 rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wider text-zinc-400">Total</div>
+          <div className="font-display text-3xl font-semibold mt-1">{fmtBRL(totalDespesas)}</div>
+        </div>
+        <div className="bg-white border border-zinc-200 rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wider text-zinc-400">Pago</div>
+          <div className="font-display text-3xl font-semibold mt-1 text-emerald-600">{fmtBRL(totalPago)}</div>
+        </div>
+        <div className="bg-white border border-zinc-200 rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wider text-zinc-400">Em aberto</div>
+          <div className={`font-display text-3xl font-semibold mt-1 ${totalAberto > 0 ? "text-amber-600" : "text-emerald-600"}`}>{fmtBRL(totalAberto)}</div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+        {filteredDespesas.length === 0 ? (
+          <div className="p-12 text-center text-zinc-400">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            Nenhuma despesa {tab === "fixas" ? "fixa" : "variável"}
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-zinc-50 text-xs uppercase tracking-wider text-zinc-500">
+              <tr>
+                <th className="px-4 py-3 text-left">Descrição</th>
+                <th className="px-4 py-3 text-left">Categoria</th>
+                <th className="px-4 py-3 text-right">Valor</th>
+                <th className="px-4 py-3 text-left">Vencimento</th>
+                <th className="px-4 py-3 text-center">Status</th>
+                <th className="px-4 py-3 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {filteredDespesas.map((d) => (
+                <tr key={d.id}>
+                  <td className="px-4 py-3 font-medium text-zinc-700">{d.descricao}</td>
+                  <td className="px-4 py-3 text-zinc-600">{d.categoria || "-"}</td>
+                  <td className="px-4 py-3 text-right font-display font-semibold">{fmtBRL(d.valor)}</td>
+                  <td className="px-4 py-3 text-zinc-600">{fmtDT(d.data_vencimento)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${d.pago ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                      {d.pago ? "Pago" : "Aberto"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-2">
+                    <Button size="icon" variant="ghost" onClick={() => openDialog(d)}>
+                      <Edit2 className="w-4 h-4 text-blue-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => deleteDespesa(d.id)}>
+                      <Trash2 className="w-4 h-4 text-rose-500" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Dialog de criação/edição */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Editar despesa" : "Nova despesa"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Descrição</Label>
+              <Input
+                value={form.descricao}
+                onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                placeholder="Ex: Aluguel do salão"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Valor</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.valor}
+                  onChange={(e) => setForm({ ...form, valor: e.target.value })}
+                  placeholder="0,00"
+                />
+              </div>
+              <div>
+                <Label>Tipo</Label>
+                <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixo">Fixa</SelectItem>
+                    <SelectItem value="variavel">Variável</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Categoria</Label>
+              <Select value={form.categoria} onValueChange={(v) => setForm({ ...form, categoria: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIAS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Vencimento</Label>
+                <Input
+                  type="date"
+                  value={form.data_vencimento}
+                  onChange={(e) => setForm({ ...form, data_vencimento: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Pagamento</Label>
+                <Input
+                  type="date"
+                  value={form.data_pagamento}
+                  onChange={(e) => setForm({ ...form, data_pagamento: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={form.pago}
+                onCheckedChange={(checked) => setForm({ ...form, pago: checked })}
+              />
+              <Label className="cursor-pointer">Marcado como pago</Label>
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Input
+                value={form.observacoes}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                placeholder="Notas adicionais..."
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={save} className="bg-[#84A59D] hover:bg-[#6F9189]">Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

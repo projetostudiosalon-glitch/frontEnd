@@ -1,0 +1,80 @@
+import React, { useEffect, useState } from "react";
+import http from "../api";
+import { PageHeader, EmptyState } from "../components/Page";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "../components/ui/dialog";
+import { UserCog, Plus, Edit2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+const blank = { nome: "", cargo: "", telefone: "", comissao_principal: 40, comissao_auxiliar: 20, ativo: true };
+
+export default function Colaboradores() {
+  const [list, setList] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blank);
+  const load = () => http.get("/colaboradores").then((r) => setList(r.data));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    try {
+      const payload = { ...form, comissao_principal: Number(form.comissao_principal), comissao_auxiliar: Number(form.comissao_auxiliar) };
+      if (form.id) await http.put(`/colaboradores/${form.id}`, payload); else await http.post("/colaboradores", payload);
+      toast.success("Salvo"); setOpen(false); setForm(blank); load();
+    } catch { toast.error("Erro ao salvar"); }
+  };
+  const del = async (id) => { if (!window.confirm("Excluir?")) return; await http.delete(`/colaboradores/${id}`); load(); };
+  const edit = (c) => { setForm(c); setOpen(true); };
+
+  return (
+    <div className="p-6 lg:p-8 fade-in">
+      <PageHeader overline="Equipe" title="Colaboradores" action={
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(blank); }}>
+          <DialogTrigger asChild><Button data-testid="add-colaborador-btn" className="bg-[#84A59D] hover:bg-[#6F9189]"><Plus className="w-4 h-4 mr-1" /> Novo colaborador</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{form.id ? "Editar" : "Novo"} colaborador</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div><Label>Nome *</Label><Input data-testid="colab-nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Cargo</Label><Input value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} /></div>
+                <div><Label>Telefone</Label><Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Comissão principal (%)</Label><Input type="number" value={form.comissao_principal} onChange={(e) => setForm({ ...form, comissao_principal: e.target.value })} /></div>
+                <div><Label>Comissão auxiliar (%)</Label><Input type="number" value={form.comissao_auxiliar} onChange={(e) => setForm({ ...form, comissao_auxiliar: e.target.value })} /></div>
+              </div>
+              <div className="flex items-center gap-2"><Switch checked={form.ativo} onCheckedChange={(v) => setForm({ ...form, ativo: v })} /><Label>Ativo</Label></div>
+            </div>
+            <DialogFooter><Button data-testid="save-colab-btn" onClick={save} className="bg-[#84A59D] hover:bg-[#6F9189]">Salvar</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      } />
+
+      {list.length === 0 ? <EmptyState icon={UserCog} title="Nenhum colaborador" hint="Cadastre profissionais para começar a agendar." /> : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {list.map((c) => (
+            <div key={c.id} className="bg-white border border-zinc-200 rounded-xl p-5" data-testid={`colab-card-${c.id}`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-display text-lg font-medium">{c.nome}</div>
+                  <div className="text-sm text-zinc-500">{c.cargo || "—"}</div>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${c.ativo ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"}`}>{c.ativo ? "Ativo" : "Inativo"}</span>
+              </div>
+              <div className="mt-4 text-sm text-zinc-600 space-y-1">
+                <div>📞 {c.telefone || "—"}</div>
+                <div>Comissão: <b>{c.comissao_principal}%</b> / aux <b>{c.comissao_auxiliar}%</b></div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-zinc-100 flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => edit(c)}><Edit2 className="w-3 h-3 mr-1" /> Editar</Button>
+                <Button size="sm" variant="ghost" onClick={() => del(c.id)}><Trash2 className="w-3 h-3 text-rose-500" /></Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

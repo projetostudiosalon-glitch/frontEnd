@@ -1,0 +1,83 @@
+import React, { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { AlertCircle } from "lucide-react";
+import { toast } from "./ui/sonner";
+
+export default function PasswordConfirmDialog({ open, onOpenChange, onConfirm, title = "Confirmar ação", description = "Digite sua senha para continuar" }) {
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!password.trim()) {
+      setError("Senha obrigatória");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await onConfirm(password);
+      setPassword("");
+      onOpenChange(false);
+    } catch (err) {
+      setError(err.message || "Erro ao confirmar");
+      toast.error(err.message || "Erro ao confirmar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenChange = (newOpen) => {
+    if (!newOpen) {
+      setPassword("");
+      setError("");
+    }
+    onOpenChange(newOpen);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-600">{description}</p>
+          <div>
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder="Digite sua senha"
+              disabled={loading}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm text-red-600">{error}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} disabled={loading} className="bg-[#84A59D] hover:bg-[#6F9189]">
+            {loading ? "Confirmando..." : "Confirmar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
